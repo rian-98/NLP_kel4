@@ -1,82 +1,56 @@
 import streamlit as st
-import requests
+import pandas as pd
+import pickle
+from sklearn.metrics.pairwise import cosine_similarity
+from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 
-# --- 1. KONFIGURASI HALAMAN ---
-st.set_page_config(
-    page_title="Chatbot Konseling Siswa", 
-    page_icon="🎓", 
-    layout="centered"
-)
+# --- 1. CONFIG & CSS ---
+st.set_page_config(page_title="Chatbot Konseling", page_icon="🎓")
+st.markdown("<style>.stApp {background-color: #0E1117; color: white;}</style>", unsafe_allow_html=True)
 
-# --- 2. STYLE CUSTOM DARK MODE ---
-# Syarat Output 6d: Demo Deployment
-st.markdown("""
-    <style>
-    .stApp {
-        background-color: #0E1117;
-        color: #FFFFFF;
-    }
-    .stChatInput textarea {
-        background-color: #262730 !important;
-        color: white !important;
-    }
-    h1, h2, h3, p, span {
-        color: #FFFFFF !important;
-    }
-    hr {
-        border-color: #31333F;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+# --- 2. LOAD DATA & MODEL LANGSUNG (Tanpa API Eksternal) ---
+@st.cache_resource
+def load_resources():
+    df = pd.read_csv("dataset_emosi.csv")
+    with open('model_tfidf.pkl', 'rb') as f:
+        tfidf, model = pickle.load(f)
+    with open('label_encoder.pkl', 'rb') as f:
+        le = pickle.load(f)
+    stemmer = StemmerFactory().create_stemmer()
+    return df, tfidf, model, le, stemmer
 
-st.title("🎓 Chatbot Konseling Siswa")
-st.caption("Respon chatbot ini diambil langsung dari dataset emosi.")
-st.write("---")
+df, tfidf, model, le, stemmer = load_resources()
 
-# --- 3. INISIALISASI SESSION STATE (Agar chat berkelanjutan) ---
-# Menyimpan riwayat agar percakapan tetap muncul di layar
+# --- 3. UI & CHAT HISTORY ---
+st.title("🎓 Chatbot Konseling Siswa (Online)")
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Halo! Aku asisten konselingmu. Ceritakan masalahmu, aku akan mencari jawaban terbaik dari dataku."}
-    ]
+    st.session_state.messages = [{"role": "assistant", "content": "Halo! Aku sudah online. Ada yang ingin kamu ceritakan?"}]
 
-# --- 4. MENAMPILKAN RIWAYAT CHAT ---
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
 
-# --- 5. INPUT CHAT & LOGIKA PREDIKSI ---
-if prompt := st.chat_input("Ketik pesanmu di sini..."):
-    # Tampilkan pesan user
+# --- 4. LOGIKA PREDIKSI ---
+if prompt := st.chat_input("Ketik di sini..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Memanggil Backend API (FastAPI)
-    try:
-        # Melakukan POST request ke API untuk mendapatkan emosi dan jawaban dataset
-        response = requests.post(
-            "http://127.0.0.1:8000/predict", 
-            json={"teks": prompt},
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            data_res = response.json()
-            # Mengambil jawaban spesifik dari dataset (Retrieval-based)
-            jawaban_dataset = data_res.get("jawaban")
-            emosi = data_res.get("emosi")
-            
-            full_response = f"{jawaban_dataset} \n\n (Terdeteksi emosi: **{emosi}**)"
-        else:
-            full_response = "Maaf, sistem gagal mengambil jawaban dari dataset."
-
-    except requests.exceptions.ConnectionError:
-        full_response = "❌ **Koneksi Gagal**: Jalankan perintah `uvicorn api:app --reload` di terminal terlebih dahulu!"
-
-    # Tampilkan respon bot
-    with st.chat_message("assistant"):
-        st.markdown(full_response)
+    # Preprocessing & Predict
+    clean_input = stemmer.stem(prompt.lower())
+    vec = tfidf.transform([clean_input])
     
-    # Simpan ke riwayat agar chat terus berlanjut
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
+    # Prediksi Emosi
+    res_idx = model.predict(vec)
+    emosi = le.inverse_transform(res_idx)[0]
+    
+    # Cari Jawaban (Similarity)
+    all_vecs = tfidf.transform(df['teks'].astype(str))
+    sim = cosine_similarity(vec, all_vecs)
+    jawaban = df.iloc[sim.argmax()]['jawaban']
+
+    full_res = f"{jawaban} \n\n (Emosi: **{emosi}**)"
+    
+    with st.chat_message("assistant"):
+        st.markdown(full_res)
+    st.session_state.messages.append({"role": "assistant", "content": full_res})
