@@ -5,10 +5,8 @@ import random
 from sklearn.metrics.pairwise import cosine_similarity
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 
-# --- CONFIG HALAMAN ---
 st.set_page_config(page_title="Chatbot Konseling Siswa", page_icon="🎓")
 
-# Custom CSS Dark Mode
 st.markdown("""
     <style>
     .stApp { background-color: #0E1117; color: white; }
@@ -16,7 +14,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOAD RESOURCES (DATA & MODEL) ---
 @st.cache_resource
 def load_all():
     df = pd.read_csv("dataset_emosi.csv")
@@ -29,12 +26,11 @@ def load_all():
 
 df, tfidf, model, le, stemmer = load_all()
 
-# --- UI HEADER ---
-st.title("🎓 Chatbot Konseling Siswa")
-st.caption("Aplikasi NLP Online - SVM & TF-IDF with Similarity Threshold")
+st.title("Chatbot Konseling Siswa")
+st.caption("Ceritakan Masalah Anda disini dan Dapatkan Dukungan Emosional")
 st.write("---")
 
-# --- SESSION STATE CHAT ---
+
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "Halo! Aku asisten konselingmu. Ada yang ingin kamu ceritakan hari ini?"}]
 
@@ -42,7 +38,7 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# --- PROSES INPUT USER ---
+
 if prompt := st.chat_input("Ketik pesanmu di sini..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
