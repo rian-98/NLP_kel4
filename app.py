@@ -26,7 +26,7 @@ def load_all():
 
 df, tfidf, model, le, stemmer = load_all()
 
-st.title("Chatbot Konseling Siswa")
+st.title("💬 Chatbot Konseling Siswa")
 st.caption("Ceritakan Masalah Anda disini dan Dapatkan Dukungan Emosional")
 st.write("---")
 
